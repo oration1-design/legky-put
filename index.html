@@ -310,6 +310,27 @@
   .pace-desc { font-size: 10px; color: var(--text-muted); font-family: sans-serif; margin-top: 2px; }
   .pace-warn { background: #fff3e0; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #b06000; font-family: sans-serif; margin-top: 8px; display: none; }
 
+  /* All Done Screen */
+  .done-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    background: linear-gradient(160deg, var(--ink) 0%, var(--ink-light) 60%, #1a5c4a 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 32px 24px; text-align: center;
+    animation: fadeInScale 0.4s ease;
+  }
+  @keyframes fadeInScale { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+  .done-stars { font-size: 48px; margin-bottom: 4px; animation: bounce 0.6s ease 0.3s both; }
+  @keyframes bounce { 0%{transform:scale(0)} 60%{transform:scale(1.2)} 100%{transform:scale(1)} }
+  .done-title { font-size: 38px; font-weight: 700; color: var(--white); font-style: italic; margin: 12px 0 8px; line-height: 1.1; }
+  .done-sub { font-size: 15px; color: rgba(255,255,255,0.75); line-height: 1.7; max-width: 300px; font-family: sans-serif; }
+  .done-streak { margin: 24px 0; background: rgba(255,255,255,0.12); border-radius: var(--radius); padding: 16px 28px; display: inline-block; }
+  .done-streak-num { font-size: 52px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .done-streak-lbl { font-size: 13px; color: rgba(255,255,255,0.7); font-family: sans-serif; margin-top: 4px; }
+  .done-habits { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 16px 0 28px; }
+  .done-habit-icon { font-size: 28px; animation: popIn 0.3s ease both; }
+  @keyframes popIn { from{transform:scale(0) rotate(-20deg)} to{transform:scale(1) rotate(0)} }
+  .done-btn { background: var(--terracotta); color: white; border: none; border-radius: 30px; padding: 14px 36px; font-size: 16px; font-family: sans-serif; font-weight: 700; cursor: pointer; }
+
   /* Toast */
   .toast {
     position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -798,6 +819,28 @@ async function pullFromGitHub() {
   }
 }
 
+function showAllDoneScreen() {
+  if (document.getElementById('done-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'done-overlay';
+  overlay.className = 'done-overlay';
+  const icons = HABITS.map((h, i) =>
+    `<div class="done-habit-icon" style="animation-delay:${0.1 + i * 0.08}s">${h.icon}</div>`
+  ).join('');
+  overlay.innerHTML = `
+    <div class="done-stars">🏆</div>
+    <div class="done-title">Молодец!</div>
+    <div class="done-sub">Ты выполнила все привычки сегодня.<br>Это и есть устойчивый результат — день за днём.</div>
+    <div class="done-streak">
+      <div class="done-streak-num">🔥 ${state.streak}</div>
+      <div class="done-streak-lbl">${state.streak === 1 ? 'день подряд' : state.streak < 5 ? 'дня подряд' : 'дней подряд'}</div>
+    </div>
+    <div class="done-habits">${icons}</div>
+    <button class="done-btn" onclick="document.getElementById('done-overlay').remove()">Продолжить ✨</button>
+  `;
+  document.body.appendChild(overlay);
+}
+
 function setupSave() {
   const token = document.getElementById('setup-token').value.trim();
   if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
@@ -882,6 +925,8 @@ function toggleHabit(id) {
   d.habits[id] = !d.habits[id];
   if (d.habits[id]) { state.totalPts += 10; showToast('+10 очков!'); }
   save(); renderHabits(); updateStreak(); updateStreakDisplay();
+  const allDone = HABITS.every(h => d.habits[h.id]);
+  if (allDone) setTimeout(showAllDoneScreen, 300);
 }
 
 function updateStreak() {
