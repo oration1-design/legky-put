@@ -365,6 +365,21 @@
   @keyframes popIn { from{transform:scale(0) rotate(-20deg)} to{transform:scale(1) rotate(0)} }
   .done-btn { background: var(--terracotta); color: white; border: none; border-radius: 30px; padding: 14px 36px; font-size: 16px; font-family: sans-serif; font-weight: 700; cursor: pointer; }
 
+  /* Reaction Popup */
+  .reaction {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(16px);
+    background: var(--white); border-radius: var(--radius); padding: 14px 18px;
+    box-shadow: 0 4px 24px rgba(30,58,53,0.18); z-index: 300;
+    display: flex; align-items: center; gap: 12px; max-width: 340px; width: calc(100% - 32px);
+    opacity: 0; transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none;
+  }
+  .reaction.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .reaction-emoji { font-size: 28px; flex-shrink: 0; }
+  .reaction-body { flex: 1; }
+  .reaction-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .reaction-text { font-size: 12px; color: var(--text-soft); font-family: sans-serif; line-height: 1.4; }
+  .reaction-close { font-size: 16px; color: var(--text-muted); cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
+
   /* Toast */
   .toast {
     position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -783,6 +798,14 @@
   </nav>
 
 </div>
+<div class="reaction" id="reaction">
+  <div class="reaction-emoji" id="reaction-emoji"></div>
+  <div class="reaction-body">
+    <div class="reaction-title" id="reaction-title"></div>
+    <div class="reaction-text" id="reaction-text"></div>
+  </div>
+  <div class="reaction-close" onclick="hideReaction()">✕</div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1094,7 +1117,7 @@ function renderHabits() {
 function toggleHabit(id) {
   const d = todayData();
   d.habits[id] = !d.habits[id];
-  if (d.habits[id]) { state.totalPts += 10; showToast('+10 очков!'); }
+  if (d.habits[id]) { state.totalPts += 10; reactHabit(id, true); }
   save(); renderHabits(); updateStreak(); updateStreakDisplay();
   const allDone = HABITS.every(h => d.habits[h.id]);
   if (allDone) setTimeout(showAllDoneScreen, 300);
@@ -1131,13 +1154,10 @@ function saveSteps() {
   state.stepsLog[TODAY] = val;
 
   // Bonus points if goal reached and wasn't before
-  if (val >= goal && prevSteps < goal) {
-    state.totalPts += 20;
-    showToast('+20 очков за норму шагов! 🎉');
-  }
-
+  if (val >= goal && prevSteps < goal) state.totalPts += 20;
   save();
   renderSteps();
+  reactSteps(val, goal);
   updateStreakDisplay();
 }
 
@@ -1178,6 +1198,7 @@ function updateSleep(val) {
   const pct = ((val - 3) / 9 * 100).toFixed(1) + '%';
   document.getElementById('sleep-range').style.setProperty('--pct', pct);
   save();
+  reactSleep(parseFloat(val));
 }
 
 // Activities
@@ -1205,7 +1226,7 @@ function addActivity() {
   document.getElementById('act-name').value = '';
   document.getElementById('act-min').value = '';
   save(); renderActivities(); updateStreakDisplay();
-  showToast('+15 очков за активность!');
+  reactActivity(name, min);
 }
 
 function removeActivity(i) {
@@ -1374,11 +1395,12 @@ function simulateAiResult() {
 
 function addAiToLog() {
   if (!lastAiResult) return;
-  todayFood().push({ ...lastAiResult, time: new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) });
+  const aiItem = { ...lastAiResult, time: new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) };
+  todayFood().push(aiItem);
   save(); renderFoodDiary(); updateTodayMacros();
   document.getElementById('ai-result-block').style.display = 'none';
   photos = []; renderGallery();
-  showToast('Добавлено в дневник ✓');
+  reactFood(aiItem);
 }
 
 function renderFoodDiary() {
@@ -1426,7 +1448,7 @@ function addManualFood() {
   save(); renderFoodDiary(); updateTodayMacros();
   ['mf-name','mf-kcal','mf-protein','mf-fat','mf-carb'].forEach(id => document.getElementById(id).value='');
   document.getElementById('manual-form').classList.remove('open');
-  showToast('Добавлено ✓');
+  reactFood(item);
 }
 
 // ===== MENU =====
@@ -1611,11 +1633,12 @@ function setPace(pace, el) {
 function addWeight() {
   const val = parseFloat(document.getElementById('weight-input').value);
   if (!val || val < 30 || val > 300) { showToast('Введите корректный вес'); return; }
+  const prevWeight = state.weightLog.length ? state.weightLog[state.weightLog.length - 1].kg : null;
   state.weightLog.push({ date: TODAY, kg: val });
   state.profile.weight = val;
   document.getElementById('weight-input').value = '';
   save(); renderWeightHistory(); calcKbju(); renderGoalWidget();
-  showToast('Вес записан ✓');
+  reactWeight(val, prevWeight);
 }
 
 function renderWeightHistory() {
@@ -1828,6 +1851,86 @@ function showToast(msg) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ===== REACTIONS =====
+let _reactionTimer;
+
+function showReaction(emoji, title, text, duration = 3500) {
+  clearTimeout(_reactionTimer);
+  document.getElementById('reaction-emoji').textContent = emoji;
+  document.getElementById('reaction-title').textContent = title;
+  document.getElementById('reaction-text').textContent = text;
+  const el = document.getElementById('reaction');
+  el.classList.add('show');
+  _reactionTimer = setTimeout(hideReaction, duration);
+}
+
+function hideReaction() {
+  document.getElementById('reaction').classList.remove('show');
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function reactHabit(id, done) {
+  if (!done) return;
+  const map = {
+    water:   { e: '💧', t: 'Вода выпита!', msgs: ['Клетки скажут спасибо', 'Гидрация — основа метаболизма', 'Отлично, продолжай в том же духе'] },
+    veggies: { e: '🥗', t: 'Овощи засчитаны!', msgs: ['Клетчатка работает на тебя', 'Именно так строится здоровье', 'Цвет на тарелке — цвет здоровья'] },
+    steps:   { e: '🚶‍♀️', t: 'Норма шагов!', msgs: ['Движение — лучший антидепрессант', 'Ноги несут тебя к цели 70 кг', 'Каждый шаг сжигает жир'] },
+    no_late: { e: '🌙', t: 'Поздний перекус — мимо!', msgs: ['Ночью тело восстанавливается, а не переваривает', 'Это одна из самых сильных привычек', 'Уровень инсулина скажет спасибо'] },
+    breath:  { e: '🍃', t: 'Дыхание сделано!', msgs: ['Кортизол снизился — стресс меньше, жир уходит быстрее', '5 минут — а эффект на весь день', 'Дыхание управляет гормонами'] },
+    sleep:   { e: '😴', t: 'Ранний сон — в зачёт!', msgs: ['Гормон роста работает только ночью', 'Сон — это когда тело меняется', 'Лучший бесплатный способ худеть'] },
+  };
+  const r = map[id];
+  if (r) showReaction(r.e, r.t, pick(r.msgs));
+}
+
+function reactSteps(steps, goal) {
+  const pct = steps / goal * 100;
+  if (pct >= 100) showReaction('🏆', `${steps.toLocaleString('ru')} шагов!`, pick(['Норма перевыполнена — +20 очков заслужены', 'Ноги тебя не подвели сегодня!', 'До 70 кг на шаг ближе — в буквальном смысле']));
+  else if (pct >= 70) showReaction('💪', 'Хороший результат!', `${Math.round(pct)}% нормы. Ещё ${Math.round(goal - steps).toLocaleString('ru')} шагов и будет 100%`);
+  else if (pct >= 30) showReaction('🚶‍♀️', 'Неплохо!', `${steps.toLocaleString('ru')} шагов. Попробуй завтра дойти до ${goal.toLocaleString('ru')}`);
+  else showReaction('😤', 'Маловато...', `${steps.toLocaleString('ru')} шагов — это менее трети нормы. Небольшая прогулка изменила бы всё`);
+}
+
+function reactWeight(kg, prev) {
+  const left = (kg - GOAL_WEIGHT).toFixed(1);
+  if (!prev) {
+    showReaction('⚖️', `${kg} кг записано`, `До цели 70 кг осталось ${left} кг. Ты на пути!`, 4000);
+    return;
+  }
+  const diff = (kg - prev).toFixed(1);
+  if (diff < -0.4) showReaction('🎉', `Минус ${Math.abs(diff)} кг!`, `До 70 кг осталось ${left} кг. Так держать — это реальный прогресс!`, 4500);
+  else if (diff < 0) showReaction('📉', `−${Math.abs(diff)} кг`, `Маленький, но верный шаг. До цели ${left} кг`, 4000);
+  else if (diff === '0.0') showReaction('⚖️', 'Вес держится', `Иногда плато — это нормально. Продолжай соблюдать привычки`, 4000);
+  else showReaction('📈', `+${diff} кг`, pick(['Не паникуй — это может быть вода или еда', 'Один день не решает всё. Важна тенденция за неделю', 'Смотри на недельный тренд, не на один замер']), 4500);
+}
+
+function reactFood(item) {
+  const t = getTargets();
+  const foods = todayFood();
+  const total = foods.reduce((s, f) => s + (f.kcal || 0), 0);
+  const proteinTotal = foods.reduce((s, f) => s + (f.protein || 0), 0);
+  const proteinPct = Math.round(proteinTotal / t.protein * 100);
+
+  if (total > t.kcal * 1.15) showReaction('⚠️', 'Превышение калорий!', `${total} из ${t.kcal} ккал — уже ${Math.round(total/t.kcal*100)}%. Следующий приём — лёгкий`);
+  else if (proteinPct >= 90) showReaction('💪', 'Белок в норме!', `${proteinTotal}г из ${t.protein}г — мышцы защищены, аппетит под контролем`);
+  else if (item.protein >= 25) showReaction('🥩', `+${item.protein}г белка`, pick(['Отличный выбор для мышц', 'Именно такие блюда ускоряют метаболизм', 'Белок насыщает и сохраняет форму']));
+  else showReaction('🍽️', item.name, `${item.kcal} ккал добавлено. Осталось ${Math.max(0, t.kcal - total)} ккал на сегодня`);
+}
+
+function reactSleep(hours) {
+  if (hours >= 8) showReaction('🌟', `${hours} ч сна — отлично!`, pick(['Гормоны в норме, метаболизм работает', 'Лучшее, что можно сделать для похудения']));
+  else if (hours >= 7) showReaction('😌', `${hours} ч сна`, 'Хорошо. Старайся стабильно спать в одно время');
+  else if (hours >= 6) showReaction('😴', `Только ${hours} ч`, 'Недосып повышает кортизол и аппетит. Постарайся лечь раньше');
+  else showReaction('😩', `${hours} ч — мало!`, 'При таком сне тело удерживает жир. Сон важен так же, как еда');
+}
+
+function reactActivity(name, min) {
+  if (min >= 45) showReaction('🔥', `${name} ${min} мин!`, pick(['Серьёзная тренировка — калории сожжены', 'Вот это интенсивность! Тело скажет спасибо']));
+  else if (min >= 20) showReaction('💚', `${name} ${min} мин`, pick(['Именно такие активности меняют тело', 'Регулярность важнее продолжительности']));
+  else showReaction('🌱', `${name} ${min} мин`, 'Любое движение лучше нуля. Продолжай!');
 }
 
 // ===== DRAG AND DROP =====
