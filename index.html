@@ -310,6 +310,40 @@
   .pace-desc { font-size: 10px; color: var(--text-muted); font-family: sans-serif; margin-top: 2px; }
   .pace-warn { background: #fff3e0; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #b06000; font-family: sans-serif; margin-top: 8px; display: none; }
 
+  /* Goal Progress Widget */
+  .goal-card { background: linear-gradient(135deg, var(--terracotta) 0%, #a04828 100%); color: white; }
+  .goal-card .card-title { color: rgba(255,255,255,0.7); }
+  .goal-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .goal-weight { font-size: 32px; font-weight: 700; line-height: 1; }
+  .goal-weight span { font-size: 14px; font-weight: 400; opacity: 0.8; }
+  .goal-target { text-align: right; }
+  .goal-target-num { font-size: 20px; font-weight: 700; opacity: 0.9; }
+  .goal-target-lbl { font-size: 11px; opacity: 0.6; font-family: sans-serif; }
+  .goal-bar { height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+  .goal-bar-fill { height: 100%; background: white; border-radius: 5px; transition: width 0.8s ease; }
+  .goal-stats { display: flex; gap: 0; }
+  .goal-stat { flex: 1; text-align: center; }
+  .goal-stat + .goal-stat { border-left: 1px solid rgba(255,255,255,0.2); }
+  .goal-stat-val { font-size: 18px; font-weight: 700; }
+  .goal-stat-lbl { font-size: 10px; opacity: 0.65; font-family: sans-serif; margin-top: 2px; }
+
+  /* Consequence Screen */
+  .consequence-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    background: linear-gradient(160deg, #1a0a00 0%, #3d1a08 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 32px 24px; text-align: center;
+    animation: fadeInScale 0.4s ease;
+  }
+  .consequence-emoji { font-size: 56px; margin-bottom: 12px; }
+  .consequence-title { font-size: 30px; font-weight: 700; color: #ff6b3d; font-style: italic; margin-bottom: 10px; line-height: 1.2; }
+  .consequence-text { font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.7; max-width: 300px; font-family: sans-serif; margin-bottom: 20px; }
+  .consequence-missed { background: rgba(255,255,255,0.07); border-radius: var(--radius); padding: 14px 20px; margin-bottom: 20px; width: 100%; max-width: 300px; }
+  .consequence-missed-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: rgba(255,255,255,0.7); font-size: 13px; font-family: sans-serif; }
+  .missed-icon { font-size: 18px; opacity: 0.5; }
+  .consequence-pledge { background: rgba(196,97,58,0.25); border: 1px solid rgba(196,97,58,0.4); border-radius: var(--radius); padding: 14px 20px; margin-bottom: 24px; max-width: 300px; font-size: 13px; color: #ffb894; font-family: sans-serif; line-height: 1.6; font-style: italic; }
+  .consequence-btn { background: var(--terracotta); color: white; border: none; border-radius: 30px; padding: 14px 36px; font-size: 16px; font-family: sans-serif; font-weight: 700; cursor: pointer; }
+
   /* All Done Screen */
   .done-overlay {
     position: fixed; inset: 0; z-index: 400;
@@ -409,6 +443,27 @@
 
     <!-- СЕГОДНЯ -->
     <div class="section active" id="sec-today">
+
+      <!-- Прогресс к цели -->
+      <div class="card goal-card" id="goal-card">
+        <div class="card-title">Путь к цели 🎯</div>
+        <div class="goal-top">
+          <div>
+            <div class="goal-weight"><span id="goal-current-w">—</span> <span>кг сейчас</span></div>
+          </div>
+          <div class="goal-target">
+            <div class="goal-target-num">70 кг</div>
+            <div class="goal-target-lbl">цель</div>
+          </div>
+        </div>
+        <div class="goal-bar"><div class="goal-bar-fill" id="goal-bar-fill" style="width:0%"></div></div>
+        <div class="goal-stats">
+          <div class="goal-stat"><div class="goal-stat-val" id="goal-lost">—</div><div class="goal-stat-lbl">кг ушло</div></div>
+          <div class="goal-stat"><div class="goal-stat-val" id="goal-left">—</div><div class="goal-stat-lbl">кг осталось</div></div>
+          <div class="goal-stat"><div class="goal-stat-val" id="goal-weeks">—</div><div class="goal-stat-lbl">нед. до цели</div></div>
+          <div class="goal-stat"><div class="goal-stat-val" id="goal-pct">—</div><div class="goal-stat-lbl">прогресс</div></div>
+        </div>
+      </div>
 
       <!-- Совет дня -->
       <div class="card tip-card">
@@ -735,8 +790,10 @@
 const GITHUB_REPO = 'oration1-design/legky-put';
 const DATA_FILE = 'data.json';
 const GITHUB_TOKEN = ['ghp_axDEdUm', 'WtCTewFoug', 'csBkVOOdG8', 'zvO07Oi1X'].join('');
+const GOAL_WEIGHT = 70;
+
 const DEFAULT_STATE = {
-  profile: { age: 55, height: 177, weight: 89, activity: 1.375, pace: 0.5 },
+  profile: { age: 55, height: 177, weight: 89, activity: 1.375, pace: 0.5, startWeight: 89 },
   days: {}, stepsLog: {}, foodLog: {}, weightLog: [],
   members: [
     { id: 1, name: 'Наталья', paid: true },
@@ -836,6 +893,101 @@ async function pullFromGitHub() {
     console.error('GitHub pull failed', e);
     return false;
   }
+}
+
+// ===== GOAL PROGRESS =====
+function renderGoalWidget() {
+  const current = state.profile.weight || 89;
+  const start = state.profile.startWeight || 89;
+  const goal = GOAL_WEIGHT;
+  const pace = state.profile.pace || 0.5;
+
+  // Use last logged weight if available
+  const lastLog = state.weightLog && state.weightLog.length > 0
+    ? state.weightLog[state.weightLog.length - 1].kg
+    : current;
+
+  const totalToLose = start - goal;
+  const lost = Math.max(0, start - lastLog);
+  const left = Math.max(0, lastLog - goal);
+  const pct = totalToLose > 0 ? Math.min(100, Math.round(lost / totalToLose * 100)) : 0;
+  const weeksLeft = pace > 0 ? Math.ceil(left / pace) : '∞';
+
+  document.getElementById('goal-current-w').textContent = lastLog.toFixed(1);
+  document.getElementById('goal-lost').textContent = lost > 0 ? '−' + lost.toFixed(1) : '0';
+  document.getElementById('goal-left').textContent = left.toFixed(1);
+  document.getElementById('goal-weeks').textContent = weeksLeft;
+  document.getElementById('goal-pct').textContent = pct + '%';
+  document.getElementById('goal-bar-fill').style.width = pct + '%';
+}
+
+// ===== CONSEQUENCE SCREEN =====
+function checkYesterdayAndShowConsequence() {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yKey = yesterday.toISOString().slice(0, 10);
+  const yData = state.days[yKey];
+
+  // Skip if already shown today or no data for yesterday
+  if (state.consequenceShownDate === TODAY) return;
+  if (!yData) return;
+
+  const done = HABITS.filter(h => yData.habits && yData.habits[h.id]);
+  const missed = HABITS.filter(h => !yData.habits || !yData.habits[h.id]);
+  if (missed.length === 0) return; // all done yesterday — no consequence
+
+  state.consequenceShownDate = TODAY;
+  save();
+  setTimeout(() => showConsequenceScreen(missed, done), 600);
+}
+
+function showConsequenceScreen(missed, done) {
+  if (document.getElementById('consequence-overlay')) return;
+
+  const missedCount = missed.length;
+  const severity = missedCount >= 5 ? 'hard' : missedCount >= 3 ? 'medium' : 'light';
+
+  const messages = {
+    hard: {
+      emoji: '😤',
+      title: 'Вчера был провал.',
+      text: 'Ты пропустила почти всё. Цель в 70 кг не приближается сама. Каждый пропущенный день — это +1 неделя к сроку. Хватит откладывать — начни прямо сейчас.',
+      pledge: '«Сегодня я выполню ВСЕ привычки. Без исключений. Я это себе обещаю.»'
+    },
+    medium: {
+      emoji: '😔',
+      title: 'Вчера не дожала.',
+      text: `Выполнено ${done.length} из 6 привычек. До цели 70 кг ещё далеко — и каждый неполный день тормозит тебя. Тело меняется только при постоянстве.`,
+      pledge: '«Сегодня я выполню всё до конца. Частичный результат — не результат.»'
+    },
+    light: {
+      emoji: '🤔',
+      title: 'Почти, но не всё.',
+      text: `${done.length} привычки выполнено — это хорошо. Но ${missedCount} пропущены. Маленькие пробелы складываются в большие задержки. Ты можешь лучше.`,
+      pledge: '«Сегодня я закрою все 6. Я уже умею это делать.»'
+    }
+  };
+
+  const m = messages[severity];
+  const overlay = document.createElement('div');
+  overlay.id = 'consequence-overlay';
+  overlay.className = 'consequence-overlay';
+  overlay.innerHTML = `
+    <div class="consequence-emoji">${m.emoji}</div>
+    <div class="consequence-title">${m.title}</div>
+    <div class="consequence-text">${m.text}</div>
+    <div class="consequence-missed">
+      ${missed.map(h => `<div class="consequence-missed-item"><span class="missed-icon">${h.icon}</span> ${h.name.replace('\n', ' ')} — не выполнено</div>`).join('')}
+    </div>
+    <div class="consequence-pledge">${m.pledge}</div>
+    <button class="consequence-btn" onclick="closePunishAndGo()">Исправляю сегодня →</button>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function closePunishAndGo() {
+  const el = document.getElementById('consequence-overlay');
+  if (el) el.remove();
 }
 
 function showAllDoneScreen() {
@@ -1462,7 +1614,7 @@ function addWeight() {
   state.weightLog.push({ date: TODAY, kg: val });
   state.profile.weight = val;
   document.getElementById('weight-input').value = '';
-  save(); renderWeightHistory(); calcKbju();
+  save(); renderWeightHistory(); calcKbju(); renderGoalWidget();
   showToast('Вес записан ✓');
 }
 
@@ -1694,6 +1846,7 @@ function renderAll() {
   updateHeaderDate();
   updateStreak();
   updateStreakDisplay();
+  renderGoalWidget();
   renderTip();
   renderHabits();
   renderSteps();
@@ -1714,10 +1867,11 @@ function renderAll() {
 async function initApp() {
   const pulled = await pullFromGitHub();
   if (pulled) {
-    // Re-read state from localStorage after pull
     state = JSON.parse(localStorage.getItem('lp_state') || 'null') || JSON.parse(JSON.stringify(DEFAULT_STATE));
   }
+  if (!state.profile.startWeight) state.profile.startWeight = state.profile.weight || 89;
   renderAll();
+  checkYesterdayAndShowConsequence();
 }
 
 async function boot() {
