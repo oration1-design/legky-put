@@ -10,7 +10,8 @@
       "protein": 142,
       "fat": 58,
       "carb": 246
-    }
+    },
+    "startWeight": 89
   },
   "days": {
     "2026-06-07": {
