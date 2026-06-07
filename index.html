@@ -771,49 +771,68 @@ function save() {
   if (getToken()) setSyncStatus('syncing', 'сохраняю...');
 }
 
-async function pushToGitHub() {
+async function ghFetch(method, body) {
   const token = getToken();
-  if (!token) return;
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_FILE}`;
+  const opts = { method, headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  if (method === 'GET') opts.headers['Cache-Control'] = 'no-cache';
+  return fetch(method === 'GET' ? url + '?t=' + Date.now() : url, opts);
+}
+
+async function getCurrentSha() {
+  try {
+    const resp = await ghFetch('GET');
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    _ghaSha = data.sha;
+    return data.sha;
+  } catch { return null; }
+}
+
+async function pushToGitHub() {
   setSyncStatus('syncing', 'сохраняю...');
   try {
+    if (!_ghaSha) await getCurrentSha();
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(state, null, 2))));
-    const body = { message: 'sync: обновление данных приложения', content };
+    const body = { message: 'sync: данные приложения', content };
     if (_ghaSha) body.sha = _ghaSha;
 
-    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_FILE}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    let resp = await ghFetch('PUT', body);
+
+    if (resp.status === 409 || resp.status === 422) {
+      _ghaSha = null;
+      await getCurrentSha();
+      if (_ghaSha) body.sha = _ghaSha;
+      resp = await ghFetch('PUT', body);
+    }
+
     if (!resp.ok) throw new Error('PUT failed: ' + resp.status);
     const data = await resp.json();
     _ghaSha = data.content.sha;
     setSyncStatus('synced', 'синхронизировано');
   } catch(e) {
-    setSyncStatus('error', 'ошибка синхронизации');
+    setSyncStatus('error', 'нет связи');
     console.error('GitHub push failed', e);
+    setTimeout(pushToGitHub, 30000);
   }
 }
 
 async function pullFromGitHub() {
-  const token = getToken();
-  if (!token) { setSyncStatus('offline', 'токен не задан'); return false; }
   setSyncStatus('syncing', 'загружаю...');
   try {
-    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_FILE}?t=${Date.now()}`, {
-      headers: { 'Authorization': `token ${token}`, 'Cache-Control': 'no-cache' }
-    });
-    if (resp.status === 404) { setSyncStatus('synced', 'новый файл'); return false; }
+    const resp = await ghFetch('GET');
+    if (resp.status === 404) { setSyncStatus('synced', 'синхронизировано'); return false; }
     if (!resp.ok) throw new Error('GET failed: ' + resp.status);
     const data = await resp.json();
     _ghaSha = data.sha;
-    const decoded = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g,'')))));
+    const decoded = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g, '')))));
     state = decoded;
     localStorage.setItem('lp_state', JSON.stringify(state));
     setSyncStatus('synced', 'синхронизировано');
     return true;
   } catch(e) {
-    setSyncStatus('error', 'ошибка загрузки');
+    setSyncStatus('error', 'нет связи');
     console.error('GitHub pull failed', e);
     return false;
   }
