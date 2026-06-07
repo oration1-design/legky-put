@@ -1,0 +1,59 @@
+{
+  "profile": {
+    "age": 55,
+    "height": 177,
+    "weight": 89,
+    "activity": 1.375,
+    "pace": 0.5,
+    "targets": {
+      "kcal": 2074,
+      "protein": 142,
+      "fat": 58,
+      "carb": 246
+    }
+  },
+  "days": {
+    "2026-06-07": {
+      "habits": {},
+      "activities": [
+        {
+          "name": "прогулка",
+          "min": 30
+        },
+        {
+          "name": "йога",
+          "min": 15
+        }
+      ],
+      "sleep": 7,
+      "steps": 4500,
+      "stepsGoal": 7000
+    }
+  },
+  "stepsLog": {
+    "2026-06-07": 4500
+  },
+  "foodLog": {
+    "2026-06-07": []
+  },
+  "weightLog": [],
+  "members": [
+    {
+      "id": 1,
+      "name": "Наталья",
+      "paid": true
+    },
+    {
+      "id": 2,
+      "name": "Светлана",
+      "paid": false
+    },
+    {
+      "id": 3,
+      "name": "Марина",
+      "paid": true
+    }
+  ],
+  "streak": 1,
+  "totalPts": 30
+}
