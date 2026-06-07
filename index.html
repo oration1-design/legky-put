@@ -338,6 +338,25 @@
   /* Disclaimer */
   .disclaimer { font-size: 11px; color: var(--text-muted); font-family: sans-serif; text-align: center; padding: 8px 0; font-style: italic; }
 
+  /* Sync indicator */
+  .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; flex-shrink: 0; }
+  .sync-status { display: flex; align-items: center; font-size: 11px; font-family: sans-serif; color: var(--text-muted); gap: 4px; }
+  .sync-status.syncing .sync-dot { background: var(--gold); animation: pulse 1s infinite; }
+  .sync-status.synced .sync-dot { background: var(--ink-light); }
+  .sync-status.error .sync-dot { background: #e05555; }
+  .sync-status.offline .sync-dot { background: var(--text-muted); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Setup screen */
+  .setup-overlay { position: fixed; inset: 0; background: var(--cream); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .setup-box { background: var(--white); border-radius: var(--radius); padding: 28px 24px; max-width: 380px; width: 100%; box-shadow: var(--shadow); text-align: center; }
+  .setup-logo { font-size: 36px; margin-bottom: 8px; }
+  .setup-title { font-size: 22px; font-weight: 700; color: var(--terracotta); font-style: italic; margin-bottom: 6px; }
+  .setup-desc { font-size: 13px; color: var(--text-soft); line-height: 1.6; margin-bottom: 20px; font-family: sans-serif; }
+  .setup-input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm); font-size: 13px; font-family: monospace; background: var(--cream); color: var(--text); margin-bottom: 10px; }
+  .setup-input:focus { outline: none; border-color: var(--terracotta); }
+  .setup-hint { font-size: 11px; color: var(--text-muted); font-family: sans-serif; margin-bottom: 16px; }
+
   /* Section header */
   .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .section-h1 { font-size: 22px; font-weight: 700; color: var(--text); font-style: italic; }
@@ -357,7 +376,22 @@
       <div class="header-title">Лёгкий путь</div>
       <div class="header-date" id="header-date"></div>
     </div>
-    <div class="streak-badge" id="header-streak">🔥 0 дней</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <div class="streak-badge" id="header-streak">🔥 0 дней</div>
+      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span id="sync-label">офлайн</span></div>
+    </div>
+  </div>
+
+  <!-- SETUP OVERLAY -->
+  <div class="setup-overlay" id="setup-overlay" style="display:none">
+    <div class="setup-box">
+      <div class="setup-logo">🌿</div>
+      <div class="setup-title">Лёгкий путь</div>
+      <div class="setup-desc">Для синхронизации данных между телефоном и компьютером введите ваш GitHub токен. Данные будут храниться в вашем репозитории.</div>
+      <input class="setup-input" id="setup-token" type="password" placeholder="ghp_ваш_токен">
+      <div class="setup-hint">Токен хранится только на этом устройстве и нигде не передаётся.</div>
+      <button class="btn btn-primary btn-full" onclick="setupSave()">Войти</button>
+    </div>
   </div>
 
   <!-- CONTENT -->
@@ -687,24 +721,103 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== STATE =====
-const TODAY = new Date().toISOString().slice(0,10);
-let state = JSON.parse(localStorage.getItem('lp_state') || 'null') || {
+// ===== CONFIG =====
+const GITHUB_REPO = 'oration1-design/legky-put';
+const DATA_FILE = 'data.json';
+const DEFAULT_STATE = {
   profile: { age: 55, height: 177, weight: 89, activity: 1.375, pace: 0.5 },
-  days: {},
-  stepsLog: {},
-  foodLog: {},
-  weightLog: [],
+  days: {}, stepsLog: {}, foodLog: {}, weightLog: [],
   members: [
     { id: 1, name: 'Наталья', paid: true },
     { id: 2, name: 'Светлана', paid: false },
     { id: 3, name: 'Марина', paid: true }
   ],
-  streak: 0,
-  totalPts: 0
+  streak: 0, totalPts: 0
 };
 
-function save() { localStorage.setItem('lp_state', JSON.stringify(state)); }
+// ===== STATE =====
+const TODAY = new Date().toISOString().slice(0,10);
+let state = JSON.parse(localStorage.getItem('lp_state') || 'null') || JSON.parse(JSON.stringify(DEFAULT_STATE));
+let _ghaSha = null; // current SHA of data.json on GitHub
+let _syncTimer = null;
+let _syncPending = false;
+
+function getToken() { return localStorage.getItem('lp_gh_token') || ''; }
+
+function setSyncStatus(status, label) {
+  const el = document.getElementById('sync-status');
+  const lbl = document.getElementById('sync-label');
+  if (!el) return;
+  el.className = 'sync-status ' + status;
+  lbl.textContent = label;
+}
+
+// Save to localStorage immediately, then debounce push to GitHub
+function save() {
+  localStorage.setItem('lp_state', JSON.stringify(state));
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(pushToGitHub, 3000);
+  if (getToken()) setSyncStatus('syncing', 'сохраняю...');
+}
+
+async function pushToGitHub() {
+  const token = getToken();
+  if (!token) return;
+  setSyncStatus('syncing', 'сохраняю...');
+  try {
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(state, null, 2))));
+    const body = { message: 'sync: обновление данных приложения', content };
+    if (_ghaSha) body.sha = _ghaSha;
+
+    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error('PUT failed: ' + resp.status);
+    const data = await resp.json();
+    _ghaSha = data.content.sha;
+    setSyncStatus('synced', 'синхронизировано');
+  } catch(e) {
+    setSyncStatus('error', 'ошибка синхронизации');
+    console.error('GitHub push failed', e);
+  }
+}
+
+async function pullFromGitHub() {
+  const token = getToken();
+  if (!token) { setSyncStatus('offline', 'токен не задан'); return false; }
+  setSyncStatus('syncing', 'загружаю...');
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${DATA_FILE}?t=${Date.now()}`, {
+      headers: { 'Authorization': `token ${token}`, 'Cache-Control': 'no-cache' }
+    });
+    if (resp.status === 404) { setSyncStatus('synced', 'новый файл'); return false; }
+    if (!resp.ok) throw new Error('GET failed: ' + resp.status);
+    const data = await resp.json();
+    _ghaSha = data.sha;
+    const decoded = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g,'')))));
+    state = decoded;
+    localStorage.setItem('lp_state', JSON.stringify(state));
+    setSyncStatus('synced', 'синхронизировано');
+    return true;
+  } catch(e) {
+    setSyncStatus('error', 'ошибка загрузки');
+    console.error('GitHub pull failed', e);
+    return false;
+  }
+}
+
+function setupSave() {
+  const token = document.getElementById('setup-token').value.trim();
+  if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+    alert('Введите корректный токен (начинается с ghp_ или github_pat_)');
+    return;
+  }
+  localStorage.setItem('lp_gh_token', token);
+  document.getElementById('setup-overlay').style.display = 'none';
+  initApp();
+}
 function todayData() {
   if (!state.days[TODAY]) state.days[TODAY] = { habits: {}, activities: [], sleep: 7, steps: 0, stepsGoal: 7000 };
   return state.days[TODAY];
@@ -1522,8 +1635,8 @@ if (zone) {
   });
 }
 
-// ===== BOOT =====
-function boot() {
+// ===== RENDER ALL =====
+function renderAll() {
   updateHeaderDate();
   updateStreak();
   updateStreakDisplay();
@@ -1541,6 +1654,27 @@ function boot() {
   document.getElementById('sleep-val').textContent = d.sleep || 7;
   const sleepPct = (((d.sleep||7) - 3) / 9 * 100).toFixed(1) + '%';
   document.getElementById('sleep-range').style.setProperty('--pct', sleepPct);
+}
+
+// ===== BOOT =====
+async function initApp() {
+  const pulled = await pullFromGitHub();
+  if (pulled) {
+    // Re-read state from localStorage after pull
+    state = JSON.parse(localStorage.getItem('lp_state') || 'null') || JSON.parse(JSON.stringify(DEFAULT_STATE));
+  }
+  renderAll();
+}
+
+async function boot() {
+  const token = getToken();
+  if (!token) {
+    // Show setup screen on first open
+    document.getElementById('setup-overlay').style.display = 'flex';
+    renderAll(); // render with localStorage data in background
+    return;
+  }
+  initApp();
 }
 
 boot();
