@@ -64,5 +64,6 @@
     }
   ],
   "streak": 0,
-  "totalPts": 30
+  "totalPts": 30,
+  "shopChecked": {}
 }
