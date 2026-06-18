@@ -29,13 +29,21 @@
       "sleep": 7,
       "steps": 4500,
       "stepsGoal": 7000
+    },
+    "2026-06-18": {
+      "habits": {},
+      "activities": [],
+      "sleep": 7,
+      "steps": 0,
+      "stepsGoal": 7000
     }
   },
   "stepsLog": {
     "2026-06-07": 4500
   },
   "foodLog": {
-    "2026-06-07": []
+    "2026-06-07": [],
+    "2026-06-18": []
   },
   "weightLog": [],
   "members": [
@@ -55,6 +63,6 @@
       "paid": true
     }
   ],
-  "streak": 1,
+  "streak": 0,
   "totalPts": 30
 }
