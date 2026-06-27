@@ -36,6 +36,13 @@
       "sleep": 7,
       "steps": 0,
       "stepsGoal": 7000
+    },
+    "2026-06-27": {
+      "habits": {},
+      "activities": [],
+      "sleep": 7,
+      "steps": 0,
+      "stepsGoal": 7000
     }
   },
   "stepsLog": {
@@ -43,7 +50,8 @@
   },
   "foodLog": {
     "2026-06-07": [],
-    "2026-06-18": []
+    "2026-06-18": [],
+    "2026-06-27": []
   },
   "weightLog": [],
   "members": [
